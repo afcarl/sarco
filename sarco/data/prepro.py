@@ -1,20 +1,21 @@
 from os.path import join
-import scipy.io
 from PIL import Image as Im
 import pdb
 import numpy as np
 import pylab as P
 import cPickle, gzip
+import scipy.io
 
-PATH = '/Users/gregoire/Downloads/sarcopenie_15_03_18/'
 PATH_FOLDS = '/Users/gregoire/Downloads/5-folds.mat'
-
-mat = scipy.io.loadmat(PATH_FOLDS)
+PATH = '/Users/gregoire/Downloads/sarcopenie_15_03_18/'
 
 def save(obj, filename, protocol=-1):
     with gzip.GzipFile(filename, 'wb') as f:
         cPickle.dump(obj, f, protocol)
 
+def load(filename):
+    with gzip.GzipFile(filename, 'r') as f:
+        return cPickle.load(f)
 
 def seuil(x, a, b):
     inf = (x > a).astype(np.int32)
@@ -67,17 +68,18 @@ def test_seuil():
 
 if __name__ == '__main__':
     #test_seuil()
+    raw = scipy.io.loadmat(PATH_FOLDS)['folds']
+    splits = [raw[0][i][0] - 1 for i in range(5)]
+
     x, y = [], []
     for i in range(128):
         x += [prepro_im(i + 1, 'warped')]
         y += [prepro_label(i + 1, 'warped')]
         print i
-    dataset = (x, y)
+    x, y = np.array(x), np.array(y)
+    dataset = (x, y, splits)
     save(dataset, "sarco_data.pkl.gz")
      
-
-for fold in mat['folds']:
-    for i in fold:
-        pass        
+     
 
 
