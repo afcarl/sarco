@@ -183,9 +183,7 @@ class MLP(object):
         self.negative_log_likelihood = (
             self.logRegressionLayer.negative_log_likelihood
         )
-        # same holds for the function computing the number of errors
-        self.errors = self.logRegressionLayer.errors
-
+        self.y_pred = self.logRegressionLayer.y_pred
         # the parameters of the model are the parameters of the two layer it is
         # made out of
         self.params = self.hiddenLayer.params + self.logRegressionLayer.params
@@ -193,35 +191,8 @@ class MLP(object):
 
 
 def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             dataset='mnist.pkl.gz', batch_size=20, n_hidden=500):
-    """
-    Demonstrate stochastic gradient descent optimization for a multilayer
-    perceptron
-
-    This is demonstrated on MNIST.
-
-    :type learning_rate: float
-    :param learning_rate: learning rate used (factor for the stochastic
-    gradient
-
-    :type L1_reg: float
-    :param L1_reg: L1-norm's weight when added to the cost (see
-    regularization)
-
-    :type L2_reg: float
-    :param L2_reg: L2-norm's weight when added to the cost (see
-    regularization)
-
-    :type n_epochs: int
-    :param n_epochs: maximal number of epochs to run the optimizer
-
-    :type dataset: string
-    :param dataset: the path of the MNIST dataset file from
-                 http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz
-
-
-   """
-    datasets = load_data(dataset)
+             split=0, batch_size=20, n_hidden=500):
+    datasets = load_data(split)
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]
@@ -240,18 +211,18 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     # allocate symbolic variables for the data
     index = T.lscalar()  # index to a [mini]batch
     x = T.matrix('x')  # the data is presented as rasterized images
-    y = T.ivector('y')  # the labels are presented as 1D vector of
+    y = T.matrix('y')  # the labels are presented as 1D vector of
                         # [int] labels
 
     rng = numpy.random.RandomState(1234)
-
+    shp = train_set_x.get_value().shape[1]
     # construct the MLP class
     classifier = MLP(
         rng=rng,
         input=x,
-        n_in=28 * 28,
+        n_in=shp,
         n_hidden=n_hidden,
-        n_out=10
+        n_out=shp
     )
 
     # start-snippet-4
@@ -267,23 +238,45 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
     # compiling a Theano function that computes the mistakes that are made
     # by the model on a minibatch
-    test_model = theano.function(
+    pred_test = theano.function(
         inputs=[index],
-        outputs=classifier.errors(y),
+        outputs=[classifier.y_pred, y],
         givens={
-            x: test_set_x[index * batch_size:(index + 1) * batch_size],
-            y: test_set_y[index * batch_size:(index + 1) * batch_size]
+            x: test_set_x[index * batch_size: (index + 1) * batch_size],
+            y: test_set_y[index * batch_size: (index + 1) * batch_size]
         }
     )
 
-    validate_model = theano.function(
+    pred_valid = theano.function(
         inputs=[index],
-        outputs=classifier.errors(y),
+        outputs=[classifier.y_pred, y],
         givens={
-            x: valid_set_x[index * batch_size:(index + 1) * batch_size],
-            y: valid_set_y[index * batch_size:(index + 1) * batch_size]
+            x: valid_set_x[index * batch_size: (index + 1) * batch_size],
+            y: valid_set_y[index * batch_size: (index + 1) * batch_size]
         }
     )
+
+    def jaccard(pred, true):
+        Ms = []
+        assert pred.shape[0] == true.shape[0]
+        assert pred.shape[1] == true.shape[1]
+        for i in range(pred.shape[0]):
+            M11 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            if M11 == 0: return 1 #TODO raise error
+            M10 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
+            M01 = (((pred[i] == 0).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            Ms += [float(M11) / (M11 + M10 + M01)]
+        return numpy.mean(Ms)
+
+
+
+    def test_model(i):
+        pred, true = pred_test(i)
+        return jaccard(pred, true)  
+    
+    def validate_model(i):
+        pred, true = pred_valid(i)
+        return jaccard(pred, true)
 
     # start-snippet-5
     # compute the gradient of cost with respect to theta (sotred in params)

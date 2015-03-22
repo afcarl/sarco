@@ -171,8 +171,8 @@ def load_data(split=0):
         """
         data_x, data_y = data_xy
         shp = data_x.shape
-        data_x = data_x.reshape((shp[0], shp[1] * shp[2]))[:,:100] # TOREMOVE
-        data_y = data_y.reshape((shp[0], shp[1] * shp[2]))[:,:100] # TOREMOVE
+        data_x = data_x.reshape((shp[0], shp[1] * shp[2]))[:,:784] # TOREMOVE
+        data_y = data_y.reshape((shp[0], shp[1] * shp[2]))[:,:784] # TOREMOVE
         #data_y = numpy.ones(shp[0])
 
         shared_x = theano.shared(numpy.asarray(data_x,
@@ -274,11 +274,16 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000,
     )
 
     def jaccard(pred, true):
-        M11 = (((pred == 1).astype(numpy.int) + (true == 1).astype(numpy.int)) == 2).sum()
-        if M11 == 0: return 1 #TODO raise error
-        M10 = (((pred == 1).astype(numpy.int) + (true == 0).astype(numpy.int)) == 2).sum()
-        M01 = (((pred == 0).astype(numpy.int) + (true == 1).astype(numpy.int)) == 2).sum()
-        return float(M11) / (M11 + M10 + M01)
+        Ms = []
+        assert pred.shape[0] == true.shape[0]
+        assert pred.shape[1] == true.shape[1]
+        for i in range(pred.shape[0]):
+            M11 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            if M11 == 0: return 1 #TODO raise error
+            M10 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
+            M01 = (((pred[i] == 0).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            Ms += [float(M11) / (M11 + M10 + M01)]
+        return numpy.mean(Ms)
 
     def test_model(i):
         pred, true = pred_test(i)

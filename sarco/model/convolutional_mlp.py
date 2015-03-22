@@ -114,7 +114,7 @@ class LeNetConvPoolLayer(object):
 
 def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
                     split=0,
-                    nkerns=[20, 50], batch_size=500):
+                    nkerns=[20, 50], batch_size=1):
     """ Demonstrates lenet on MNIST dataset
 
     :type learning_rate: float
@@ -152,7 +152,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
 
     # start-snippet-1
     x = T.matrix('x')   # the data is presented as rasterized images
-    y = T.ivector('y')  # the labels are presented as 1D vector of
+    y = T.matrix('y')  # the labels are presented as 1D vector of
                         # [int] labels
 
     ######################
@@ -162,7 +162,8 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
 
     # Reshape matrix of rasterized images of shape (batch_size, 28 * 28)
     # to a 4D tensor, compatible with our LeNetConvPoolLayer
-    shp = numpy.int(numpy.sqrt(train_set_x.get_value().shape[1]))
+    dim = train_set_x.get_value().shape[1]
+    shp = numpy.int(numpy.sqrt(dim))
     layer0_input = x.reshape((batch_size, 1, shp, shp))
 
     # Construct the first convolutional pooling layer:
@@ -171,7 +172,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
     # 4D output tensor is thus of shape (batch_size, nkerns[0], 12, 12)
     
     inshp = (shp, shp)
-    filtershp = (5, 5)
+    filtershp = (3, 3)
     poolshp = (2, 2)
 
     layer0 = LeNetConvPoolLayer(
@@ -182,7 +183,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
         poolsize=poolshp
     )
     inshp = ((inshp[0] - filtershp[0] + 1) / poolshp[0], (inshp[1] - filtershp[1] + 1) / poolshp[1])
-    filtershp = (5, 5)
+    filtershp = (3, 3)
     poolshp = (2, 2)
 
     # Construct the second convolutional pooling layer
@@ -203,7 +204,6 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
     # This will generate a matrix of shape (batch_size, nkerns[1] * 4 * 4),
     # or (500, 50 * 4 * 4) = (500, 800) with the default values.
     layer2_input = layer1.output.flatten(2)
-
     # construct a fully-connected sigmoidal layer
     layer2 = HiddenLayer(
         rng,
@@ -214,29 +214,51 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
     )
 
     # classify the values of the fully-connected sigmoidal layer
-    layer3 = LogisticRegression(input=layer2.output, n_in=500, n_out=10)
+    layer3 = LogisticRegression(input=layer2.output, n_in=500, n_out=dim)
 
     # the cost we minimize during training is the NLL of the model
     cost = layer3.negative_log_likelihood(y)
 
     # create a function to compute the mistakes that are made by the model
-    test_model = theano.function(
-        [index],
-        layer3.errors(y),
+    pred_test = theano.function(
+        inputs=[index],
+        outputs=[layer3.y_pred, y],
         givens={
             x: test_set_x[index * batch_size: (index + 1) * batch_size],
             y: test_set_y[index * batch_size: (index + 1) * batch_size]
         }
     )
 
-    validate_model = theano.function(
-        [index],
-        layer3.errors(y),
+    pred_valid = theano.function(
+        inputs=[index],
+        outputs=[layer3.y_pred, y],
         givens={
             x: valid_set_x[index * batch_size: (index + 1) * batch_size],
             y: valid_set_y[index * batch_size: (index + 1) * batch_size]
         }
     )
+
+    def jaccard(pred, true):
+        Ms = []
+        assert pred.shape[0] == true.shape[0]
+        assert pred.shape[1] == true.shape[1]
+        for i in range(pred.shape[0]):
+            M11 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            if M11 == 0: return 1 #TODO raise error
+            M10 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
+            M01 = (((pred[i] == 0).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            Ms += [float(M11) / (M11 + M10 + M01)]
+        return numpy.mean(Ms)
+
+    def test_model(i):
+        pred, true = pred_test(i)
+        return jaccard(pred, true)  
+    
+    def validate_model(i):
+        pred, true = pred_valid(i)
+        return jaccard(pred, true)
+
+
 
     # create a list of all model parameters to be fit by gradient descent
     params = layer3.params + layer2.params + layer1.params + layer0.params
