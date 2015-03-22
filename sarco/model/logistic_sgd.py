@@ -35,6 +35,7 @@ References:
 __docformat__ = 'restructedtext en'
 
 from sarco.data.data import get_whole, get_split
+import pdb
 
 import cPickle
 import gzip
@@ -170,8 +171,8 @@ def load_data(split=0):
         """
         data_x, data_y = data_xy
         shp = data_x.shape
-        data_x = data_x.reshape((shp[0], shp[1] * shp[2]))
-        data_y = data_y.reshape((shp[0], shp[1] * shp[2]))
+        data_x = data_x.reshape((shp[0], shp[1] * shp[2]))[:,:100] # TOREMOVE
+        data_y = data_y.reshape((shp[0], shp[1] * shp[2]))[:,:100] # TOREMOVE
         #data_y = numpy.ones(shp[0])
 
         shared_x = theano.shared(numpy.asarray(data_x,
@@ -273,8 +274,11 @@ def sgd_optimization_mnist(learning_rate=0.13, n_epochs=1000,
     )
 
     def jaccard(pred, true):
-        pdb.set_trace()
-        pass
+        M11 = (((pred == 1).astype(numpy.int) + (true == 1).astype(numpy.int)) == 2).sum()
+        if M11 == 0: return 1 #TODO raise error
+        M10 = (((pred == 1).astype(numpy.int) + (true == 0).astype(numpy.int)) == 2).sum()
+        M01 = (((pred == 0).astype(numpy.int) + (true == 1).astype(numpy.int)) == 2).sum()
+        return float(M11) / (M11 + M10 + M01)
 
     def test_model(i):
         pred, true = pred_test(i)
