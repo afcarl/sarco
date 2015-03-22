@@ -20,7 +20,7 @@ References:
 """
 __docformat__ = 'restructedtext en'
 
-
+import pdb
 import os
 import sys
 import time
@@ -100,10 +100,11 @@ class HiddenLayer(object):
         self.b = b
 
         lin_output = T.dot(input, self.W) + self.b
-        self.output = (
-            lin_output if activation is None
-            else activation(lin_output)
-        )
+        self.output = T.switch(lin_output<0, 0, lin_output)
+        #self.output = (
+        #    lin_output if activation is None
+        #    else activation(lin_output)
+        #)
         # parameters of the model
         self.params = [self.W, self.b]
 
@@ -158,6 +159,7 @@ class MLP(object):
         # The logistic regression layer gets as input the hidden units
         # of the hidden layer
         self.logRegressionLayer = LogisticRegression(
+            rng=rng,
             input=self.hiddenLayer.output,
             n_in=n_hidden,
             n_out=n_out
@@ -190,8 +192,8 @@ class MLP(object):
         # end-snippet-3
 
 
-def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             split=0, batch_size=20, n_hidden=500):
+def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
+             split=0, batch_size=1, n_hidden=100):
     datasets = load_data(split)
 
     train_set_x, train_set_y = datasets[0]
@@ -247,6 +249,16 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         }
     )
 
+    pred_train = theano.function(
+        inputs=[index],
+        outputs=[classifier.y_pred, y],
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size],
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+
+
     pred_valid = theano.function(
         inputs=[index],
         outputs=[classifier.y_pred, y],
@@ -256,19 +268,22 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         }
     )
 
-    def jaccard(pred, true):
+    def jaccard(pred, true, seuil=0.5):
         Ms = []
         assert pred.shape[0] == true.shape[0]
         assert pred.shape[1] == true.shape[1]
         for i in range(pred.shape[0]):
-            M11 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            M11 = (((pred[i] >= seuil).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
             if M11 == 0: return 1 #TODO raise error
-            M10 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
-            M01 = (((pred[i] == 0).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            M10 = (((pred[i] >= seuil).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
+            M01 = (((pred[i] < seuil).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            #print 'M11',  M11, 'M01', M01, 'M10', M10
             Ms += [float(M11) / (M11 + M10 + M01)]
         return numpy.mean(Ms)
 
-
+    def eval_train(i):
+        pred, true = pred_train(i)
+        return jaccard(pred, true)  
 
     def test_model(i):
         pred, true = pred_test(i)
@@ -318,7 +333,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     patience = 10000  # look as this many examples regardless
     patience_increase = 2  # wait this much longer when a new best is
                            # found
-    improvement_threshold = 0.995  # a relative improvement of this much is
+    improvement_threshold = 1# 0.995  # a relative improvement of this much is
                                    # considered significant
     validation_frequency = min(n_train_batches, patience / 2)
                                   # go through this many
@@ -326,7 +341,7 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
                                   # on the validation set; in this case we
                                   # check every epoch
 
-    best_validation_loss = numpy.inf
+    best_validation_loss = -numpy.inf
     best_iter = 0
     test_score = 0.
     start_time = time.clock()
@@ -336,13 +351,31 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
     while (epoch < n_epochs) and (not done_looping):
         epoch = epoch + 1
+        minibatch_avg_cost = []
         for minibatch_index in xrange(n_train_batches):
 
-            minibatch_avg_cost = train_model(minibatch_index)
+            minibatch_avg_cost += [train_model(minibatch_index)]
+
+
             # iteration number
             iter = (epoch - 1) * n_train_batches + minibatch_index
 
             if (iter + 1) % validation_frequency == 0:
+                print numpy.mean(minibatch_avg_cost)
+                train_losses = [eval_train(i) for i
+                                         in xrange(n_train_batches)]
+                this_train_loss = numpy.mean(train_losses)
+                
+                print(
+                    'epoch %i, minibatch %i/%i, train error %f %%' %
+                    (
+                        epoch,
+                        minibatch_index + 1,
+                        n_train_batches,
+                        this_train_loss * 100.
+                    )
+                )
+
                 # compute zero-one loss on validation set
                 validation_losses = [validate_model(i) for i
                                      in xrange(n_valid_batches)]
@@ -359,10 +392,10 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
                 )
 
                 # if we got the best validation score until now
-                if this_validation_loss < best_validation_loss:
+                if this_validation_loss > best_validation_loss:
                     #improve patience if loss improvement is good enough
                     if (
-                        this_validation_loss < best_validation_loss *
+                        this_validation_loss > best_validation_loss *
                         improvement_threshold
                     ):
                         patience = max(patience, iter * patience_increase)
@@ -394,4 +427,6 @@ def test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 
 if __name__ == '__main__':
-    test_mlp()
+    test_mlp(learning_rate=0.001, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
+             split=0, batch_size=5, n_hidden=100)
+ 

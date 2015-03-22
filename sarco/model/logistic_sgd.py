@@ -58,7 +58,7 @@ class LogisticRegression(object):
     determine a class membership probability.
     """
 
-    def __init__(self, input, n_in, n_out):
+    def __init__(self, rng, input, n_in, n_out):
         """ Initialize the parameters of the logistic regression
 
         :type input: theano.tensor.TensorType
@@ -76,11 +76,19 @@ class LogisticRegression(object):
         """
         # start-snippet-1
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
-        self.W = theano.shared(
-            value=numpy.zeros(
-                (n_in, n_out),
-                dtype=theano.config.floatX
+        W_values = numpy.asarray(
+            rng.uniform(
+                low=-numpy.sqrt(6. / (n_in + n_out)),
+                high=numpy.sqrt(6. / (n_in + n_out)),
+                size=(n_in, n_out)
             ),
+            dtype=theano.config.floatX
+        )
+        if 1:#activation == theano.tensor.nnet.sigmoid:
+            W_values *= 4
+
+        self.W = theano.shared(
+            value=W_values,
             name='W',
             borrow=True
         )
@@ -106,7 +114,7 @@ class LogisticRegression(object):
 
         # symbolic description of how to compute prediction as class whose
         # probability is maximal
-        self.y_pred = self.p_y_given_x > 0.5
+        self.y_pred = self.p_y_given_x #> 0.5
 
         # parameters of the model
         self.params = [self.W, self.b]
@@ -171,9 +179,8 @@ def load_data(split=0):
         """
         data_x, data_y = data_xy
         shp = data_x.shape
-        data_x = data_x.reshape((shp[0], shp[1] * shp[2]))[:,:784] # TOREMOVE
-        data_y = data_y.reshape((shp[0], shp[1] * shp[2]))[:,:784] # TOREMOVE
-        #data_y = numpy.ones(shp[0])
+        data_x = data_x.reshape((shp[0], shp[1] * shp[2]))
+        data_y = data_y.reshape((shp[0], shp[1] * shp[2]))
 
         shared_x = theano.shared(numpy.asarray(data_x,
                                                dtype=theano.config.floatX),

@@ -106,7 +106,8 @@ class LeNetConvPoolLayer(object):
         # reshape it to a tensor of shape (1, n_filters, 1, 1). Each bias will
         # thus be broadcasted across mini-batches and feature map
         # width & height
-        self.output = T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+        act = pooled_out + self.b.dimshuffle('x', 0, 'x', 'x')
+        self.output = T.switch(act<0, 0, act)
 
         # store parameters of this layer
         self.params = [self.W, self.b]
@@ -214,7 +215,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
     )
 
     # classify the values of the fully-connected sigmoidal layer
-    layer3 = LogisticRegression(input=layer2.output, n_in=500, n_out=dim)
+    layer3 = LogisticRegression(rng=rng, input=layer2.output, n_in=500, n_out=dim)
 
     # the cost we minimize during training is the NLL of the model
     cost = layer3.negative_log_likelihood(y)
@@ -238,15 +239,15 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
         }
     )
 
-    def jaccard(pred, true):
+    def jaccard(pred, true, seuil=0.5):
         Ms = []
         assert pred.shape[0] == true.shape[0]
         assert pred.shape[1] == true.shape[1]
         for i in range(pred.shape[0]):
-            M11 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            M11 = (((pred[i] >= seuil).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
             if M11 == 0: return 1 #TODO raise error
-            M10 = (((pred[i] == 1).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
-            M01 = (((pred[i] == 0).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
+            M10 = (((pred[i] >= seuil).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
+            M01 = (((pred[i] < seuil).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
             Ms += [float(M11) / (M11 + M10 + M01)]
         return numpy.mean(Ms)
 
@@ -295,7 +296,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
     patience = 10000  # look as this many examples regardless
     patience_increase = 2  # wait this much longer when a new best is
                            # found
-    improvement_threshold = 0.995  # a relative improvement of this much is
+    improvement_threshold = 1 #0.995  # a relative improvement of this much is
                                    # considered significant
     validation_frequency = min(n_train_batches, patience / 2)
                                   # go through this many
@@ -303,7 +304,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
                                   # on the validation set; in this case we
                                   # check every epoch
 
-    best_validation_loss = numpy.inf
+    best_validation_loss = -numpy.inf
     best_iter = 0
     test_score = 0.
     start_time = time.clock()
@@ -332,10 +333,10 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
                        this_validation_loss * 100.))
 
                 # if we got the best validation score until now
-                if this_validation_loss < best_validation_loss:
+                if this_validation_loss > best_validation_loss:
 
                     #improve patience if loss improvement is good enough
-                    if this_validation_loss < best_validation_loss *  \
+                    if this_validation_loss > best_validation_loss *  \
                        improvement_threshold:
                         patience = max(patience, iter * patience_increase)
 
@@ -368,7 +369,9 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
                           ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
 if __name__ == '__main__':
-    evaluate_lenet5()
+    evaluate_lenet5(learning_rate=0.001, n_epochs=200,
+                    split=0,
+                    nkerns=[20, 50], batch_size=5)
 
 
 def experiment(state, channel):
