@@ -4,6 +4,7 @@ import pdb
 from sarco.data.prepro import load
 
 PATH = "/Users/gregoire/Code/sarco/sarco/data/sarco_data.pkl.gz"
+PATH = "/data/lisatmp2/mesnilgr/sarco/sarco/data/sarco_data.pkl.gz"
 
 def get_split(i):
     ''' return train, valid, test for split i'''
@@ -19,6 +20,7 @@ def get_whole():
     ''' return all the training images'''
     x, y, splits = load(PATH)
     train_idx = np.hstack(splits[:4])
+    train = (x[train_idx], y[train_idx])
     test = (x[splits[4]], y[splits[4]])
     return train, test
 
