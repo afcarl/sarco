@@ -35,6 +35,7 @@ References:
 __docformat__ = 'restructedtext en'
 
 from sarco.data.data import get_whole, get_split
+from PIL import Image as Im
 import pdb
 
 import cPickle
@@ -154,6 +155,20 @@ class LogisticRegression(object):
         elif cost == 'mse':
             return T.mean(T.sum((y - self.p_y_given_x) ** 2, axis=1))
 
+def rotate_data(train_set, degree):
+    xs = train_set[0].get_value()
+    ys = train_set[1].get_value()
+    for i, x in enumerate(xs):
+        imx = Im.fromarray(x.reshape((311, 457)))
+        imy = Im.fromarray(ys[i].reshape((311, 457)))
+        deg = numpy.random.uniform(-degree, degree)
+        imx.rotate(deg)
+        imy.rotate(deg)
+        xs[i] = numpy.array(imx).flatten()
+        ys[i] = numpy.array(imy).flatten()
+    train_set[0].set_value(xs)
+    train_set[1].set_value(ys)
+
 def load_data(split=0):
     ''' Loads the dataset
 
@@ -163,7 +178,11 @@ def load_data(split=0):
     print '... loading data'
 
     # Load the dataset
-    train_set, valid_set, test_set = get_split(split)
+    if split == -1:
+        train_set, test_set = get_whole()
+        valid_set = test_set
+    else:
+        train_set, valid_set, test_set = get_split(split)
     
     #train_set, valid_set, test_set format: tuple(input, target)
     #input is an numpy.ndarray of 2 dimensions (a matrix)

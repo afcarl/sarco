@@ -31,7 +31,7 @@ import theano
 import theano.tensor as T
 
 
-from logistic_sgd import LogisticRegression, load_data
+from logistic_sgd import LogisticRegression, load_data, rotate_data
 
 
 # start-snippet-1
@@ -201,7 +201,7 @@ class MLP(object):
 
 
 def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             split=0, batch_size=1, n_hidden=[100]):
+             split=0, batch_size=1, n_hidden=[100], rot = 5):
     datasets = load_data(split)
 
     train_set_x, train_set_y = datasets[0]
@@ -358,6 +358,7 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     done_looping = False
 
     while (epoch < n_epochs) and (not done_looping):
+        rotate_data((train_set_x, train_set_y), rot)
         epoch = epoch + 1
         minibatch_avg_cost = []
         for minibatch_index in xrange(n_train_batches):
@@ -435,6 +436,6 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 
 if __name__ == '__main__':
-    test_mlp(learning_rate=0.0001, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             split=0, batch_size=1, n_hidden=[1000, 1000])
+    test_mlp(learning_rate=0.00001, L1_reg=0.00, L2_reg=0.00, n_epochs=1000,
+             split=2, batch_size=1, n_hidden=[1500, 1500], rot=10)
  
