@@ -32,17 +32,28 @@ def to01(x):
     x /= x.max()
     return x
 
+def box(x, h, w):
+    h0, w0 = x.shape
+    assert h < h0 and w < w0
+    h1, w1 = (h0 - h) // 2, (w0 - w) // 2
+    x = x[h1:h1 + h, w1:w1 + w]
+    nh, nw = x.shape
+    assert nh == h and nw == w
+    return x
+
 def prepro_im(i, style):
     assert style in ['warped', 'original']
     x = Im.open(join(PATH, str(i).zfill(3), style, "l3.png"))
     x = np.array(x) - 1024 # remove shift origin HU
     x = seuil(x, -29, 150) # seuillage
     x = to01(x) # between [0, 1]
+    x = box(x, 311, 457)
     return x
 
 def prepro_label(i, style):
     x = Im.open(join(PATH, str(i).zfill(3), style, "muscle.png"))
     x = np.array(x).astype('uint8')
+    x = box(x, 311, 457)
     return x
 
 # tests
