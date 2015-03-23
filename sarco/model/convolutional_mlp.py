@@ -33,7 +33,7 @@ import theano.tensor as T
 from theano.tensor.signal import downsample
 from theano.tensor.nnet import conv
 
-from logistic_sgd import LogisticRegression, load_data
+from logistic_sgd import LogisticRegression, load_data, rotate_data
 from mlp import HiddenLayer
 
 
@@ -115,7 +115,7 @@ class LeNetConvPoolLayer(object):
 
 def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
                     split=0,
-                    nkerns=[20, 50], batch_size=1):
+                    nkerns=[20, 50], batch_size=1, rot=20):
     """ Demonstrates lenet on MNIST dataset
 
     :type learning_rate: float
@@ -315,6 +315,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
 
     while (epoch < n_epochs) and (not done_looping):
         epoch = epoch + 1
+        rotate_data((train_set_x, train_set_y), rot)
         for minibatch_index in xrange(n_train_batches):
 
             iter = (epoch - 1) * n_train_batches + minibatch_index
@@ -372,7 +373,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
 if __name__ == '__main__':
     evaluate_lenet5(learning_rate=0.0001, n_epochs=200,
                     split=0,
-                    nkerns=[20, 50], batch_size=5)
+                    nkerns=[20, 50], batch_size=10, rot=10)
 
 
 def experiment(state, channel):
