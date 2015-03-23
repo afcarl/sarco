@@ -165,14 +165,15 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
     # to a 4D tensor, compatible with our LeNetConvPoolLayer
     dim = train_set_x.get_value().shape[1]
     shp = numpy.int(numpy.sqrt(dim))
-    layer0_input = x.reshape((batch_size, 1, shp, shp))
+    shp = (311, 457)
+    layer0_input = x.reshape((batch_size, 1, shp[0], shp[1]))
 
     # Construct the first convolutional pooling layer:
     # filtering reduces the image size to (28-5+1 , 28-5+1) = (24, 24)
     # maxpooling reduces this further to (24/2, 24/2) = (12, 12)
     # 4D output tensor is thus of shape (batch_size, nkerns[0], 12, 12)
     
-    inshp = (shp, shp)
+    inshp = shp
     filtershp = (3, 3)
     poolshp = (2, 2)
 
@@ -369,7 +370,7 @@ def evaluate_lenet5(learning_rate=0.1, n_epochs=200,
                           ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
 if __name__ == '__main__':
-    evaluate_lenet5(learning_rate=0.001, n_epochs=200,
+    evaluate_lenet5(learning_rate=0.0001, n_epochs=200,
                     split=0,
                     nkerns=[20, 50], batch_size=5)
 
