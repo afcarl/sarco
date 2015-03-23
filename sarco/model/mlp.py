@@ -64,6 +64,7 @@ class HiddenLayer(object):
                            layer
         """
         self.input = input
+        self.nhid = n_out
         # end-snippet-1
 
         # `W` is initialized with `W_values` which is uniformely sampled
@@ -148,36 +149,41 @@ class MLP(object):
         # into a HiddenLayer with a tanh activation function connected to the
         # LogisticRegression layer; the activation function can be replaced by
         # sigmoid or any other nonlinear function
-        self.hiddenLayer = HiddenLayer(
-            rng=rng,
-            input=input,
-            n_in=n_in,
-            n_out=n_hidden,
-            activation=T.tanh
-        )
+        cur_in, cur_in_d = input, n_in
+        self.layers = []
+        for n_hid in n_hidden:
+            self.layers += [HiddenLayer(
+                rng=rng,
+                input=cur_in,
+                n_in=cur_in_d,
+                n_out=n_hid,
+                activation=T.tanh
+            )]
+            cur_in = self.layers[-1].output
+            cur_in_d = self.layers[-1].nhid
 
         # The logistic regression layer gets as input the hidden units
         # of the hidden layer
         self.logRegressionLayer = LogisticRegression(
             rng=rng,
-            input=self.hiddenLayer.output,
-            n_in=n_hidden,
+            input=self.layers[-1].output,
+            n_in=n_hidden[-1],
             n_out=n_out
         )
         # end-snippet-2 start-snippet-3
         # L1 norm ; one regularization option is to enforce L1 norm to
         # be small
-        self.L1 = (
-            abs(self.hiddenLayer.W).sum()
-            + abs(self.logRegressionLayer.W).sum()
-        )
+        self.L1 = abs(self.logRegressionLayer.W).sum()
+        for layer in self.layers:
+            self.L1 += abs(layer.W).sum()
+        
 
         # square of L2 norm ; one regularization option is to enforce
         # square of L2 norm to be small
-        self.L2_sqr = (
-            (self.hiddenLayer.W ** 2).sum()
-            + (self.logRegressionLayer.W ** 2).sum()
-        )
+        self.L2_sqr = (self.logRegressionLayer.W ** 2).sum()
+        for layer in self.layers:
+            self.L2_sqr += (layer.W ** 2).sum()
+        
 
         # negative log likelihood of the MLP is given by the negative
         # log likelihood of the output of the model, computed in the
@@ -188,12 +194,14 @@ class MLP(object):
         self.y_pred = self.logRegressionLayer.y_pred
         # the parameters of the model are the parameters of the two layer it is
         # made out of
-        self.params = self.hiddenLayer.params + self.logRegressionLayer.params
+        self.params = self.logRegressionLayer.params
+        for layer in self.layers:
+            self.params += layer.params 
         # end-snippet-3
 
 
 def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             split=0, batch_size=1, n_hidden=100):
+             split=0, batch_size=1, n_hidden=[100]):
     datasets = load_data(split)
 
     train_set_x, train_set_y = datasets[0]
@@ -427,6 +435,6 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 
 if __name__ == '__main__':
-    test_mlp(learning_rate=0.001, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             split=0, batch_size=5, n_hidden=100)
+    test_mlp(learning_rate=0.0001, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
+             split=0, batch_size=1, n_hidden=[1000, 1000])
  
