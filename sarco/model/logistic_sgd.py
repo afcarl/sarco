@@ -59,7 +59,7 @@ class LogisticRegression(object):
     determine a class membership probability.
     """
 
-    def __init__(self, rng, input, n_in, n_out):
+    def __init__(self, rng, input, n_in, n_out, activation='sigmoid'):
         """ Initialize the parameters of the logistic regression
 
         :type input: theano.tensor.TensorType
@@ -75,6 +75,7 @@ class LogisticRegression(object):
                       which the labels lie
 
         """
+        assert activation in ['linear', 'sigmoid']
         # start-snippet-1
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out)
         W_values = numpy.asarray(
@@ -111,7 +112,11 @@ class LogisticRegression(object):
         # x is a matrix where row-j  represents input training sample-j
         # b is a vector where element-k represent the free parameter of hyper
         # plain-k
-        self.p_y_given_x = T.nnet.sigmoid(T.dot(input, self.W) + self.b)
+        self.activation = activation
+        if activation == 'sigmoid':
+            self.p_y_given_x = T.nnet.sigmoid(T.dot(input, self.W) + self.b)
+        if activation == 'linear':
+            self.p_y_given_x = T.dot(input, self.W) + self.b
 
         # symbolic description of how to compute prediction as class whose
         # probability is maximal
@@ -138,22 +143,12 @@ class LogisticRegression(object):
         Note: we use the mean instead of the sum so that
               the learning rate is less dependent on the batch size
         """
-        # start-snippet-2
-        # y.shape[0] is (symbolically) the number of rows in y, i.e.,
-        # number of examples (call it n) in the minibatch
-        # T.arange(y.shape[0]) is a symbolic vector which will contain
-        # [0,1,2,... n-1] T.log(self.p_y_given_x) is a matrix of
-        # Log-Probabilities (call it LP) with one row per example and
-        # one column per class LP[T.arange(y.shape[0]),y] is a vector
-        # v containing [LP[0,y[0]], LP[1,y[1]], LP[2,y[2]], ...,
-        # LP[n-1,y[n-1]]] and T.mean(LP[T.arange(y.shape[0]),y]) is
-        # the mean (across minibatch examples) of the elements in v,
-        # i.e., the mean log-likelihood across the minibatch.
         assert cost in ['mse', 'kl']
         if cost == 'kl':
+            assert self.activation == 'sigmoid'
             return T.mean(-T.sum(y * T.log(self.p_y_given_x) + (1 - y) * T.log(1 - self.p_y_given_x), axis=1))
         elif cost == 'mse':
-            return T.mean(T.sum((y - self.p_y_given_x) ** 2, axis=1))
+            return T.mean(T.sum((y - self.p_y_given_x)**2, axis=1))
 
 def rotate_data(train_set, degree):
     xs = train_set[0].get_value()
