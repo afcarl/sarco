@@ -367,6 +367,9 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 
 if __name__ == '__main__':
+    #test    83.941713 +- 5.588072 %
+    # test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.00, n_epochs=1000,
+    #         split=2, batch_size=5, n_hidden=[128], rot=0, seuil=0.2)
     test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.00, n_epochs=1000,
              split=2, batch_size=5, n_hidden=[128], rot=0, seuil=0.2)
  
