@@ -34,7 +34,18 @@ import matplotlib as M
 M.use("Agg")
 from PIL import Image as Im
 
+from sarco.data.prepro import tile_raster_images
 from logistic_sgd import LogisticRegression, load_data, rotate_data
+
+def jaccard(pred, true):
+    assert pred.shape[0] == true.shape[0] == 1
+    assert pred.shape[1] == true.shape[1]
+    M11 = (pred + true == 2).sum()
+    M10 = (1 + pred - true == 2).sum()
+    M01 = (1 - pred + true == 2).sum()
+    #print 'M11',  M11, 'M01', M01, 'M10', M10
+    return float(M11) / (M11 + M10 + M01)
+
 
 
 # start-snippet-1
@@ -153,7 +164,7 @@ class MLP(object):
 
 
 def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
-             split=0, batch_size=1, n_hidden=[100], rot = 5):
+             split=0, batch_size=1, n_hidden=[100], rot=5, seuil=0.25):
     datasets = load_data(split)
 
     train_set_x, train_set_y = datasets[0]
@@ -213,8 +224,8 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         inputs=[index],
         outputs=[classifier.y_pred, y],
         givens={
-            x: train_set_x[index * batch_size: (index + 1) * batch_size],
-            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+            x: train_set_x[index: (index + 1)],
+            y: train_set_y[index: (index + 1)]
         }
     )
 
@@ -228,38 +239,43 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         }
     )
 
-    def jaccard(pred, true, x, seuil=0.25, plot=False):
-        if plot:
-            bigpic = []
-        Ms = []
-        assert pred.shape[0] == true.shape[0]
-        assert pred.shape[1] == true.shape[1]
-        for i in range(pred.shape[0]):
+    def evaluation(fn, d, ens, epoch, seuil, plot):
+        x = d.get_value()
+        n_samples = x.shape[0]
+        if plot: bigpic = []
+        acc = []
+
+        for i in xrange(n_samples):
+            
+            pred, true = fn(i)
+            pred_mask = pred * (x[i] > 0)
+
+            pred_out = (pred_mask >= seuil).astype(numpy.int)
+            true_out = true.astype(numpy.int)
+            acc += [jaccard(pred_out, true_out)]
+
             if plot:
-                bigpic += [x[i], pred[i], true[i]]
-            pred[i] *= (x[i] > 0).astype(numpy.float)
-            M11 = (((pred[i] >= seuil).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
-            if M11 == 0:
-                print 'no intersection between prediction and label!'
-                #raise NotImplementedError 
-            M10 = (((pred[i] >= seuil).astype(numpy.int) + (true[i] == 0).astype(numpy.int)) == 2).sum()
-            M01 = (((pred[i] < seuil).astype(numpy.int) + (true[i] == 1).astype(numpy.int)) == 2).sum()
-            #print 'M11',  M11, 'M01', M01, 'M10', M10
-            Ms += [float(M11) / (M11 + M10 + M01)]
-        bigpic = numpy.vstack(bigpic)
-        return numpy.mean(Ms)
+                bigpic += [x[i], pred, pred_mask, pred_out, true_out]
 
-    def eval_train(i):
-        pred, true = pred_train(i)
-        return jaccard(pred, true, train_set_x.get_value())  
+        this_acc = numpy.mean(acc)
+        std_acc = numpy.std(acc)
 
-    def test_model(i):
-        pred, true = pred_test(i)
-        return jaccard(pred, true, test_set_x.get_value())  
-    
-    def validate_model(i):
-        pred, true = pred_valid(i)
-        return jaccard(pred, true, valid_set_x.get_value())
+        print(
+            'epoch %i, %s error %f +- %f %%' %
+            (
+                epoch,
+                ens,
+                this_acc * 100.,
+                std_acc * 100.
+            )
+        )
+
+        if plot:
+            bigpic = numpy.vstack(bigpic)
+            tile = tile_raster_images(bigpic, (311, 457), (n_samples // 4, 5 * 4), output_pixel_vals=True)
+            Im.fromarray(tile).convert("RGB").save("images/" + ens + str(epoch) + ".png")
+
+        return this_acc
 
     gparams = [T.grad(cost, param) for param in classifier.params]
     updates = [
@@ -267,9 +283,6 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
         for param, gparam in zip(classifier.params, gparams)
     ]
 
-    # compiling a Theano function `train_model` that returns the cost, but
-    # in the same time updates the parameter of the model based on the rules
-    # defined in `updates`
     train_model = theano.function(
         inputs=[index],
         outputs=cost,
@@ -279,12 +292,12 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
             y: train_set_y[index * batch_size: (index + 1) * batch_size]
         }
     )
-    # end-snippet-5
 
     ###############
     # TRAIN MODEL #
     ###############
-    print '... training'
+    n_training_samples = train_set_x.get_value().shape[0]
+    print '... training over %i training samples' % n_training_samples
 
     # early-stopping parameters
     patience = 10000  # look as this many examples regardless
@@ -306,10 +319,8 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
     epoch = 0
     done_looping = False
     
-    train_losses = [eval_train(i) for i
-                             in xrange(n_train_batches)]
-    this_train_loss = numpy.mean(train_losses)
-    #print this_train_loss
+    evaluation(pred_train, train_set_x, "train", epoch, seuil, True)
+    print "training started..."
 
     while (epoch < n_epochs) and (not done_looping):
         rotate_data((train_set_x, train_set_y), rot)
@@ -325,56 +336,22 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
             if (iter + 1) % validation_frequency == 0:
                 print "mean avg cost over training :: ", numpy.mean(minibatch_avg_cost)
-                train_losses = [eval_train(i) for i
-                                         in xrange(n_train_batches)]
-                this_train_loss = numpy.mean(train_losses)
-                
-                print(
-                    'epoch %i, minibatch %i/%i, train error %f %%' %
-                    (
-                        epoch,
-                        minibatch_index + 1,
-                        n_train_batches,
-                        this_train_loss * 100.
-                    )
-                )
 
-                # compute zero-one loss on validation set
-                validation_losses = [validate_model(i) for i
-                                     in xrange(n_valid_batches)]
-                this_validation_loss = numpy.mean(validation_losses)
-
-                print(
-                    'epoch %i, minibatch %i/%i, validation error %f %%' %
-                    (
-                        epoch,
-                        minibatch_index + 1,
-                        n_train_batches,
-                        this_validation_loss * 100.
-                    )
-                )
+                evaluation(pred_train, train_set_x, "train", epoch, seuil, True)
+                val = evaluation(pred_valid, valid_set_x, "valid", epoch, seuil, True)
 
                 # if we got the best validation score until now
-                if this_validation_loss > best_validation_loss:
+                if val > best_validation_loss:
                     #improve patience if loss improvement is good enough
                     if (
-                        this_validation_loss > best_validation_loss *
+                        val > best_validation_loss *
                         improvement_threshold
                     ):
                         patience = max(patience, iter * patience_increase)
 
-                    best_validation_loss = this_validation_loss
+                    best_validation_loss = val
                     best_iter = iter
-
-                    # test it on the test set
-                    test_losses = [test_model(i) for i
-                                   in xrange(n_test_batches)]
-                    test_score = numpy.mean(test_losses)
-
-                    print(('     epoch %i, minibatch %i/%i, test error of '
-                           'best model %f %%') %
-                          (epoch, minibatch_index + 1, n_train_batches,
-                           test_score * 100.))
+                    evaluation(pred_test, test_set_x, "test", epoch, seuil, True)
 
             if patience <= iter:
                 done_looping = True
@@ -390,6 +367,6 @@ def test_mlp(learning_rate=0.05, L1_reg=0.00, L2_reg=0.0001, n_epochs=1000,
 
 
 if __name__ == '__main__':
-    test_mlp(learning_rate=0.001, L1_reg=0.00, L2_reg=0.00, n_epochs=1000,
-             split=2, batch_size=10, n_hidden=[1024, 1024], rot=0)
+    test_mlp(learning_rate=0.01, L1_reg=0.00, L2_reg=0.00, n_epochs=1000,
+             split=2, batch_size=75, n_hidden=[1024, 1024], rot=0, seuil=0.2)
  
