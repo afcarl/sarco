@@ -1,15 +1,10 @@
-import pdb
-import time
-import numpy as np
 from theano import tensor as T
 import theano
 import cPickle
-
-from utils import load, crop, sample, get_data
+import numpy as np
 from layers import HiddenLayer, LeNetConvPoolLayer
 
 class base(object):
-
     def save(self, filename):
         with open(filename, "w") as f:
             for layer in self.layers:
@@ -93,8 +88,6 @@ class CNN4Layers(base):
         print "model contains %i parameters" % nparams
         self.output = self.layers[-1].output
 
- 
-
 class CNN3Layers(base):
     def __init__(self, cropsize, batch_size, nkerns=[10, 10, 10], filters=[11, 6, 4]):
         self.X_batch, self.y_batch = T.tensor4('x'), T.matrix('y')
@@ -152,7 +145,6 @@ class CNN3Layers(base):
                           for p in self.params])
         print "model contains %i parameters" % nparams
         self.output = self.layers[-1].output
-
  
 class CNN2Layers(base):
     def __init__(self, cropsize, batch_size, nkerns=[10, 10], filters=[11, 6]):
@@ -199,8 +191,7 @@ class CNN2Layers(base):
         print "model contains %i parameters" % nparams
         self.output = self.layers[-1].output
 
- 
-def theano_fns(model, dataset):
+def theano_fns(model, dataset, learning_rate=0):
     cost = T.mean((model.output - model.y_batch) ** 2)
     error = abs(model.output - model.y_batch)
     grads = T.grad(cost, model.params)
@@ -219,69 +210,3 @@ def theano_fns(model, dataset):
     return train_fn, valid_fn
 
 
-if __name__ == "__main__":
-
-    debug = False
-    ens = "frontal"
-    cropsize = 400
-    batch_size = 128
-    learning_rate = 0.00001
-    val_frequency = 100
-    n_batches_valid = 100
-    nlayers = 4
-
-    if debug:
-        val_frequency = 1
-        n_batches_valid = 10
-
-    (train_x, train_y, train_ymm), (test_x, test_y, test_ymm) = load(ens)
-    dataset = get_data(ens)
-    
-    model = eval("CNN%iLayers(cropsize, batch_size)" % nlayers)
-    train_fn, valid_fn = theano_fns(model, dataset)
-
-    train_costs, train_errors, naive_train = [], [] , []
-    best_val = np.inf 
-    for i in range(10000):
-        # sample a new dataset
-        sample(dataset, "train", i, train_x, train_y, train_ymm)
-        
-        # compute naive prediction
-        naive_train += [dataset['y_train'].get_value()]
-        
-        # train
-        train_cost, train_error = train_fn()
-        train_costs += [train_cost]
-        train_errors += [train_error]
-
-        # compute validation error
-        if (i + 1) % val_frequency == 0:
-            valid_error, naive_error = [], []
-            naive_pred = np.mean(naive_train)
-            
-            for j in range(n_batches_valid):
-                # sample a new dataset
-                sample(dataset, "valid", j, test_x, test_y, test_ymm)
-
-                naive_err = abs(dataset['y_valid'].get_value() - naive_pred)
-                valid_err, out = valid_fn()
-                valid_error += [valid_err.T]
-                naive_error += [naive_err.T]
-            
-            valid_error = np.hstack(valid_error)
-            naive_error = np.hstack(naive_error)
-            
-            # early stopping
-            if np.mean(valid_error) < best_val:
-                best_val = np.mean(valid_error)
-                best_val_std = np.std(valid_error)
-                model.save("models/best-%s-%ilayers.pkl" % (ens, nlayers))
-
-            print "update %i train cost :: %.2f \t train_error :: %.2f (in mm) \t \
-                valid error is %.2f +- %.2f (in mm) (best is %.2f +- %.2f) \t naive error is %.2f +- %.2f (in mm)" \
-                % ((i + 1), np.mean(train_costs), \
-                np.mean(train_errors), np.mean(valid_error), \
-                np.std(valid_error), best_val, best_val_std, np.mean(naive_error), np.std(naive_error))
-
-            train_costs, train_errors = [], [] 
-            # save model
