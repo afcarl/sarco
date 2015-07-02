@@ -150,9 +150,10 @@ if __name__ == "__main__":
     model.load("models/best-%s-%ilayers.pkl" % (ens, nlayers))
     train_fn, valid_fn = theano_fns(model, dataset)
 
-    _, ypred = valid_fn()
-
+    error, ypred = valid_fn()
+    print 'error %.2f +- %.2f ' % (np.mean(error), np.std(error))
     y = mm2px(y, train_y, train_ymm)
+    print y
     ypred = mm2px(ypred, train_y, train_ymm)
     X = plot_line(X, y)
     X = plot_line(X, ypred)
