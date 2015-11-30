@@ -36,6 +36,7 @@ if __name__ == "__main__":
     best_val = np.inf 
     for i in range(10000):
         # sample a new dataset
+        (train_x, train_y, train_ymm), _ = load(ens, rotation=False)
         sample(dataset, "train", train_x, train_y, train_ymm, cropsize, uniform=True)
         
         # compute naive prediction
