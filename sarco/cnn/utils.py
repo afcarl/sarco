@@ -4,12 +4,25 @@ import numpy as np
 import theano
 import lasagne
 import pdb
+import os
 
 random.seed(123)
 
-def load(e = "frontal"):
+def load(e = "frontal", rotation=False):
     assert e in ["frontal", "lateral"]
-    frontal, lateral, y, ymm = hkl.load(open("/home/mesnilgr/repos/sarco/sarco/cnn/l3.hkl")) 
+    if not rotation:
+        frontal, lateral, y, ymm = hkl.load(open("/home/mesnilgr/repos/sarco/sarco/cnn/l3.hkl")) 
+    else:
+        loaded = False
+        root = "/home/mesnilgr/repos/sarco/sarco/cnn/data"
+        while not loaded:
+            fns = os.listdir(root)
+            random.shuffle(fns)
+            try:
+                frontal, lateral, y, ymm = hkl.load(open(os.path.join(root, fns[0]))) 
+                loaded = True
+            except IOError:
+                pass
 
     if e == "frontal":
         frontal = frontal.astype(theano.config.floatX) - frontal.max()
